@@ -6,6 +6,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/wataru-dev/bot-api/src/controller"
 	"github.com/wataru-dev/bot-api/src/infrastructure/web"
+	"github.com/wataru-dev/bot-api/src/usecase"
 )
 
 func main() {
@@ -16,8 +17,11 @@ func main() {
 
 	engine := web.SetupEngine()
 
+	// initialize usecase
+	botUseCase := usecase.NewBotUseCase()
+
 	//	initialize controller
-	botController := controller.NewBotController()
+	botController := controller.NewBotController(botUseCase)
 
 	//	routing
 	engine.POST("/webhook", botController.Webhook)
