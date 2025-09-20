@@ -25,6 +25,7 @@ func (sr *SessionRepositories) Add(userId, role, content string) error {
 		Role: role,
 		Content: content,
 		Timestamp: time.Now().Unix(),
+		ExpireAt:  time.Now().Add(24 * time.Hour),
 	})
 	if err != nil {
 		return err
