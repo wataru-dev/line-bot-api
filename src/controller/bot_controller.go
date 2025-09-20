@@ -35,7 +35,7 @@ func (bc *BotController) Webhook(ctx *gin.Context) {
 	for _, e := range req.Events {
 
 		switch e.Type {
-		case "text":
+		case "message":
 			err := bc.UseCase.ReplyText(&req)
 			if err != nil {
 				ctx.JSON(400, gin.H{"error": err.Error()})

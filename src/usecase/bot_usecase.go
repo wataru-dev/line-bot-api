@@ -2,9 +2,12 @@ package usecase
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"google.golang.org/genai"
 
 	"github.com/wataru-dev/bot-api/src/config"
 	"github.com/wataru-dev/bot-api/src/controller"
@@ -25,12 +28,36 @@ func(buc *BotUseCase) ReplyText(events *entities.LineWebhook) error {
 
 	env := config.SetEnvironment()
 
+	
 	for _, e := range events.Events {
+
+		ctx := context.Background()
+
+		// GenAI のクライアントを生成 
+		geminiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
+        APIKey:  env.GeminiKey,
+        Backend: genai.BackendGeminiAPI,
+    })
+
+		if err != nil {
+				log.Fatal(err)
+		}
+		
+		userPrompt := "依頼する内容はLINEでユーザーにレスポンスを返すのでマークダウン形式ではなくテキスト形式で生成をお願いします。"
+		
+		// Geminiへのリクエスト
+		result, _ := geminiClient.Models.GenerateContent(
+        ctx,
+        "gemini-2.5-flash",
+        genai.Text(userPrompt + e.Message.Text),
+        nil,
+		)
+
 		// リプライ用のペイロードを作成
 		payload := entities.ReplyMessage{
 			ReplyToken: e.ReplyToken,
 			Messages: []entities.Message{
-				{Type: "text", Text: e.Message.Text},
+				{Type: "text", Text: result.Text()},
 			},
 		}
 
