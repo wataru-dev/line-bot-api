@@ -60,7 +60,7 @@ func(buc *BotUseCase) ReplyText(events *line.LineWebhook) error {
 		systemPrompt := "あなたは親しみやすいアシスタントです。ユーザーの入力に対して猫語で答えてください。"
 
 		// トーク履歴を取得
-		history, err := buc.Repository.GetRecentMessages(e.Source.UserID, 10)
+		history, err := buc.Repository.GetRecentMessages(e.Source.UserID, 20)
 
 		if err != nil {
 			return err
