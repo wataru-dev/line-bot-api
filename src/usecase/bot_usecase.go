@@ -110,7 +110,7 @@ func(buc *BotUseCase) ReplyText(events *line.LineWebhook) error {
 		defer resp.Body.Close()
 
 		// トーク履歴をFireStoreに書き込み
-		if err := buc.Repository.Add(e.Source.UserID, "system", result.Text()); err != nil {
+		if err := buc.Repository.Add(e.Source.UserID, "assistant", result.Text()); err != nil {
 			return err
 		}
 
