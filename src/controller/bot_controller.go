@@ -2,11 +2,8 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/wataru-dev/bot-api/src/domain/entities"
+	entities "github.com/wataru-dev/bot-api/src/domain/entities/line"
 )
-
-
-
 type BotController struct {
 	UseCase IBotUseCase
 }

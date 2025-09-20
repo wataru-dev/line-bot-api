@@ -4,32 +4,46 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"time"
 
 	"google.golang.org/genai"
 
 	"github.com/wataru-dev/bot-api/src/config"
 	"github.com/wataru-dev/bot-api/src/controller"
-	"github.com/wataru-dev/bot-api/src/domain/entities"
+	"github.com/wataru-dev/bot-api/src/domain/entities/line"
+	"github.com/wataru-dev/bot-api/src/infrastructure/store/model"
 )
 
 type BotUseCase struct {
+	Repository ISessionRepository
+}
+
+type ISessionRepository interface {
+	Add(userId, role, content string) error
+	GetRecentMessages(userId string, limit int) (*[]model.Session, error)
 }
 
 
-func NewBotUseCase() controller.IBotUseCase {
+func NewBotUseCase(repository ISessionRepository) controller.IBotUseCase {
 	return &BotUseCase{
-
+		Repository: repository,
 	}
 }
 
-func(buc *BotUseCase) ReplyText(events *entities.LineWebhook) error {
+func(buc *BotUseCase) ReplyText(events *line.LineWebhook) error {
 
 	env := config.SetEnvironment()
 
-	
 	for _, e := range events.Events {
+
+		// ユーザーからのメッセージをFireStoreに書き込み
+		if err := buc.Repository.Add(e.Source.UserID, "user", e.Message.Text); err != nil {
+			return err
+		}
 
 		ctx := context.Background()
 
@@ -43,20 +57,29 @@ func(buc *BotUseCase) ReplyText(events *entities.LineWebhook) error {
 				log.Fatal(err)
 		}
 		
-		userPrompt := "依頼する内容はLINEでユーザーにレスポンスを返すのでマークダウン形式ではなくテキスト形式で生成をお願いします。"
+		systemPrompt := "あなたは親しみやすいアシスタントです。ユーザーの入力に対して猫語で答えてください。"
+
+		// トーク履歴を取得
+		history, err := buc.Repository.GetRecentMessages(e.Source.UserID, 10)
+
+		if err != nil {
+			return err
+		}
+
+		prompt := BuildPrompt(systemPrompt, e.Message.Text, history)
 		
 		// Geminiへのリクエスト
 		result, _ := geminiClient.Models.GenerateContent(
         ctx,
         "gemini-2.5-flash",
-        genai.Text(userPrompt + e.Message.Text),
+        genai.Text(prompt),
         nil,
 		)
 
 		// リプライ用のペイロードを作成
-		payload := entities.ReplyMessage{
+		payload := line.ReplyMessage{
 			ReplyToken: e.ReplyToken,
-			Messages: []entities.Message{
+			Messages: []line.Message{
 				{Type: "text", Text: result.Text()},
 			},
 		}
@@ -86,8 +109,45 @@ func(buc *BotUseCase) ReplyText(events *entities.LineWebhook) error {
 
 		defer resp.Body.Close()
 
+		// トーク履歴をFireStoreに書き込み
+		if err := buc.Repository.Add(e.Source.UserID, "system", result.Text()); err != nil {
+			return err
+		}
+
 	}
 
 	return nil
 
+}
+
+func BuildPrompt(systemPrompt, userPrompt string, history *[]model.Session) string {
+
+		var sb strings.Builder
+
+		// システムプロンプトを生成
+		if systemPrompt != "" {
+			sb.WriteString("### システム指示\n")
+			sb.WriteString(systemPrompt + "\n\n")
+		}
+
+		// セッション履歴の生成
+		if len(*history) > 0 {
+			sb.WriteString("### 会話履歴\n")
+			for _, m := range *history {
+				t := time.Unix(m.Timestamp, 0).Format("2006-01-02 15:04:05")
+				switch m.Role {
+				case "user":
+					sb.WriteString(fmt.Sprintf("[ユーザー @%s]: %s\n", t, m.Content))
+				case "assistant":
+					sb.WriteString(fmt.Sprintf("[AI @%s]: %s\n", t, m.Content))
+				}
+			}
+			sb.WriteString("\n")
+	}
+
+	// ユーザープロンプト
+	sb.WriteString("### 新しい入力\n")
+	sb.WriteString(userPrompt + "\n")
+
+	return sb.String()
 }

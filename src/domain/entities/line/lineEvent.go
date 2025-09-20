@@ -1,4 +1,4 @@
-package entities
+package line
 
 type LineWebhook struct {
 	Events []struct {

@@ -5,6 +5,9 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/wataru-dev/bot-api/src/controller"
+	"github.com/wataru-dev/bot-api/src/domain/repositories/fireStoreRepositories"
+	"github.com/wataru-dev/bot-api/src/infrastructure/store"
+	"github.com/wataru-dev/bot-api/src/infrastructure/store/storeRepositories"
 	"github.com/wataru-dev/bot-api/src/infrastructure/web"
 	"github.com/wataru-dev/bot-api/src/usecase"
 )
@@ -17,8 +20,18 @@ func main() {
 
 	engine := web.SetupEngine()
 
+	// initialize client
+	fireStoreClient, _ := store.NewFireStoreClient()
+	defer fireStoreClient.Close()
+
+	// initialize store repository
+	infrastructureSessionRepository := storeRepositories.NewSessionRepository(fireStoreClient)
+
+	// initialize repository
+	sessionRepository := fireStoreRepositories.NewSessionRepository(infrastructureSessionRepository)
+
 	// initialize usecase
-	botUseCase := usecase.NewBotUseCase()
+	botUseCase := usecase.NewBotUseCase(sessionRepository)
 
 	//	initialize controller
 	botController := controller.NewBotController(botUseCase)
