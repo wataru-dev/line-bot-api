@@ -3,14 +3,13 @@ package fireStoreRepositories
 import (
 	"github.com/wataru-dev/bot-api/src/infrastructure/store/model"
 	"github.com/wataru-dev/bot-api/src/infrastructure/store/storeRepositories"
-	"github.com/wataru-dev/bot-api/src/usecase"
 )
 
 type SessionRepository struct {
-	Repository *storeRepositories.SessionRepositories
+	Repository *storeRepositories.SessionRepository
 }
 
-func NewSessionRepository(repository *storeRepositories.SessionRepositories) usecase.ISessionRepository {
+func NewSessionRepository(repository *storeRepositories.SessionRepository) *SessionRepository {
 	return &SessionRepository{
 		Repository: repository,
 	}

@@ -9,17 +9,17 @@ import (
 	"github.com/wataru-dev/bot-api/src/infrastructure/store/model"
 )
 
-type SessionRepositories struct {
+type SessionRepository struct {
 	Client *store.FireStoreClient
 }
 
-func NewSessionRepository(client *store.FireStoreClient) *SessionRepositories{
-	return &SessionRepositories{
+func NewSessionRepository(client *store.FireStoreClient) *SessionRepository{
+	return &SessionRepository{
 		Client: client,
 	}
 }
 
-func (sr *SessionRepositories) Add(userId, role, content string) error {
+func (sr *SessionRepository) Add(userId, role, content string) error {
 	ctx := context.Background()
 	_, _, err := sr.Client.Client.Collection("sessions").Doc(userId).Collection("messages").Add(ctx, model.Session{
 		Role: role,
@@ -33,7 +33,7 @@ func (sr *SessionRepositories) Add(userId, role, content string) error {
 	return nil
 }
 
-func (sr *SessionRepositories) GetRecentMessages(userId string, limit int) ([]model.Session, error) {
+func (sr *SessionRepository) GetRecentMessages(userId string, limit int) ([]model.Session, error) {
 	ctx := context.Background()
 
 	iter := sr.Client.Client.

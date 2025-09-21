@@ -13,7 +13,6 @@ import (
 	"google.golang.org/genai"
 
 	"github.com/wataru-dev/bot-api/src/config"
-	"github.com/wataru-dev/bot-api/src/controller"
 	"github.com/wataru-dev/bot-api/src/domain/entities/line"
 	"github.com/wataru-dev/bot-api/src/infrastructure/store/model"
 )
@@ -28,96 +27,87 @@ type ISessionRepository interface {
 }
 
 
-func NewBotUseCase(repository ISessionRepository) controller.IBotUseCase {
-	return &BotUseCase{
-		Repository: repository,
-	}
+func NewBotUseCase(repository ISessionRepository) *BotUseCase {
+    return &BotUseCase{
+        Repository: repository,
+    }
 }
 
-func(buc *BotUseCase) ReplyText(events *line.LineWebhook) error {
+func (buc *BotUseCase) ReplyText(e *line.LineEvent) error {
 
-	env := config.SetEnvironment()
+    env := config.SetEnvironment()
 
-	for _, e := range events.Events {
+    // ユーザーからのメッセージをFireStoreに書き込み
+    if err := buc.Repository.Add(e.Source.UserID, "user", e.Message.Text); err != nil {
+        return err
+    }
 
-		// ユーザーからのメッセージをFireStoreに書き込み
-		if err := buc.Repository.Add(e.Source.UserID, "user", e.Message.Text); err != nil {
-			return err
-		}
+    ctx := context.Background()
 
-		ctx := context.Background()
-
-		// GenAI のクライアントを生成 
-		geminiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
+    // GenAI のクライアントを生成
+    geminiClient, err := genai.NewClient(ctx, &genai.ClientConfig{
         APIKey:  env.GeminiKey,
         Backend: genai.BackendGeminiAPI,
     })
+    if err != nil {
+        log.Fatal(err)
+    }
 
-		if err != nil {
-				log.Fatal(err)
-		}
-		
-		systemPrompt := "あなたは親しみやすいアシスタントです。ユーザーの入力に対して猫語で答えてください。"
+    systemPrompt := "あなたは親しみやすいアシスタントで名前はネネちゃんです。ユーザーの入力に対して猫語で答えてください。"
 
-		// トーク履歴を取得
-		history, err := buc.Repository.GetRecentMessages(e.Source.UserID, 20)
+    // トーク履歴を取得
+    history, err := buc.Repository.GetRecentMessages(e.Source.UserID, 20)
+    if err != nil {
+        return err
+    }
 
-		if err != nil {
-			return err
-		}
+    prompt := BuildPrompt(systemPrompt, e.Message.Text, history)
 
-		prompt := BuildPrompt(systemPrompt, e.Message.Text, history)
-		
-		// Geminiへのリクエスト
-		result, _ := geminiClient.Models.GenerateContent(
+    // Geminiへのリクエスト
+    result, _ := geminiClient.Models.GenerateContent(
         ctx,
-        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
         genai.Text(prompt),
         nil,
-		)
+    )
 
-		// リプライ用のペイロードを作成
-		payload := line.ReplyMessage{
-			ReplyToken: e.ReplyToken,
-			Messages: []line.Message{
-				{Type: "text", Text: result.Text()},
-			},
-		}
+    // リプライ用のペイロードを作成
+    payload := line.ReplyMessage{
+        ReplyToken: e.ReplyToken,
+        Messages: []line.Message{
+            {Type: "text", Text: result.Text()},
+        },
+    }
 
-		body, err := json.Marshal(payload)
+    body, err := json.Marshal(payload)
+    if err != nil {
+        return err
+    }
 
-		if err != nil {
-			return err
-		}
+    // リクエスト生成
+    call, err := http.NewRequest("POST", env.ReplyUri, bytes.NewBuffer(body))
+    if err != nil {
+        return err
+    }
+    call.Header.Set("Content-Type", "application/json")
+    call.Header.Set("Authorization", "Bearer "+env.LineToken)
 
-		// リクエスト生成
-		call, err := http.NewRequest("POST", env.ReplyUri, bytes.NewBuffer(body))
-		if err != nil {
-			return err
-		}
-		call.Header.Set("Content-Type", "application/json")
-		call.Header.Set("Authorization", "Bearer "+env.LineToken)
+    client := &http.Client{}
 
-		client := &http.Client{}
+    // リクエスト実行
+    resp, err := client.Do(call)
+    if err != nil {
+        return err
+    }
+    log.Println(resp)
+    defer resp.Body.Close()
 
-		// リクエスト実行
-		resp, err := client.Do(call)
-		if err != nil {
-			return err
-		}
-		log.Println(resp)
+    // トーク履歴をFireStoreに書き込み
+    if err := buc.Repository.Add(e.Source.UserID, "assistant", result.Text()); err != nil {
+        return err
+    }
 
-		defer resp.Body.Close()
-
-		// トーク履歴をFireStoreに書き込み
-		if err := buc.Repository.Add(e.Source.UserID, "assistant", result.Text()); err != nil {
-			return err
-		}
-
-	}
-
-	return nil
-
+    return nil
 }
 
 func BuildPrompt(systemPrompt, userPrompt string, history *[]model.Session) string {
