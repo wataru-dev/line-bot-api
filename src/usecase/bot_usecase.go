@@ -53,7 +53,7 @@ func (buc *BotUseCase) ReplyText(e *line.LineEvent) error {
         log.Fatal(err)
     }
 
-    systemPrompt := "あなたは親しみやすいアシスタントで名前はネネちゃんです。ユーザーの入力に対して猫語で答えてください。"
+    systemPrompt := "あなたは親しみやすいアシスタントです。ユーザーの入力に対して猫語で答えてください。名前はねねちゃんで名前を聞かれた場合だけ教えてください。"
 
     // トーク履歴を取得
     history, err := buc.Repository.GetRecentMessages(e.Source.UserID, 20)
